@@ -104,7 +104,7 @@ func (c *matrixChannel) Connect(ctx context.Context) error {
 // reconnects; un-advanced events re-deliver and dedup absorbs duplicates).
 // Product drops return nil.
 func (c *matrixChannel) dispatch(ctx context.Context, roomID string, rawEvent json.RawMessage) error {
-	msg, ok := inboundFromEvent(rawEvent, roomID, c.api.userID)
+	msg, ok := inboundFromEvent(rawEvent, roomID, c.botID)
 	if !ok {
 		return nil
 	}
