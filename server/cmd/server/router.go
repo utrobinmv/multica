@@ -35,6 +35,7 @@ import (
 	composiointeg "github.com/multica-ai/multica/server/internal/integrations/composio"
 	"github.com/multica-ai/multica/server/internal/integrations/dingtalk"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
+	matrix "github.com/multica-ai/multica/server/internal/integrations/matrix"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
 	"github.com/multica-ai/multica/server/internal/integrations/telegram"
 	"github.com/multica-ai/multica/server/internal/integrations/wecom"
@@ -1303,6 +1304,46 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 		slog.Info("telegram integration disabled (MULTICA_TELEGRAM_SECRET_KEY not set)")
 	}
 
+	// Matrix integration. Same shape as Telegram: BYO homeserver + access token
+	// pasted at install, one /sync long-poll loop per active installation
+	// supervised by the shared engine.Supervisor, resolvers on the generic
+	// channel_* tables, outbound single-shot replies on the event bus. Gated by
+	// MULTICA_MATRIX_SECRET_KEY (the at-rest token encryption key); when unset
+	// the handlers return 503 and no Factory is registered.
+	if matrixKey, err := secretbox.LoadKey("MULTICA_MATRIX_SECRET_KEY"); err == nil {
+		box, err := secretbox.New(matrixKey)
+		if err != nil {
+			slog.Error("matrix: secretbox.New failed; matrix integration disabled", "error", err)
+		} else {
+			// Phase 1: no inbound/outbound media. Object-storage backed media
+			// ingest + file delivery are a follow-up; the channel is still
+			// built with AcceptsMedia=false so media messages are treated as
+			// unsupported rather than silently dropped (see matrix_channel.go).
+			matrixOutbound := matrix.NewOutbound(queries, box.Open, slog.Default(), nil)
+			channelRouter.Register(matrix.TypeMatrix, matrix.NewMatrixResolverSet(queries, pool, nil, nil, nil))
+			matrixOutbound.Register(bus)
+			h.MatrixOutbound = matrixOutbound
+
+			// Per-installation inbound: the Supervisor builds + supervises one
+			// /sync loop per active Matrix installation.
+			matrix.RegisterMatrix(channelRegistry, matrix.ChannelDeps{
+				Decrypt: box.Open,
+				Logger:  slog.Default(),
+			})
+
+			installSvc, mErr := matrix.NewInstallService(queries, pool, box, slog.Default())
+			if mErr != nil {
+				slog.Error("matrix: InstallService init failed; install disabled", "error", mErr)
+			} else {
+				h.MatrixInstall = installSvc
+				h.MatrixBinding = matrix.NewBindingService(queries)
+			}
+			slog.Info("matrix integration enabled (per-installation /sync long polling)")
+		}
+	} else {
+		slog.Info("matrix integration disabled (MULTICA_MATRIX_SECRET_KEY not set)")
+	}
+
 	// Composio integration (MUL-3720). Gated by COMPOSIO_API_KEY plus the
 	// composio_mcp_apps feature flag. The env var is the project-scoped key the
 	// standalone SDK authenticates Composio with (sent as x-api-key; the project
@@ -1948,6 +1989,19 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Use(middleware.RequireWorkspaceRoleFromURL(queries, "id", "owner", "admin"))
 					r.Delete("/telegram/installations/{installationId}", h.RevokeTelegramInstallation)
 					r.Post("/telegram/install", h.RegisterTelegramBot)
+				})
+
+				// Matrix integration. Mirror of the Telegram wiring: listing is
+				// member-visible; install / revoke / bind are owner/admin-only.
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceMemberFromURL(queries, "id"))
+					r.Get("/matrix/installations", h.ListMatrixInstallations)
+				})
+				r.Group(func(r chi.Router) {
+					r.Use(middleware.RequireWorkspaceRoleFromURL(queries, "id", "owner", "admin"))
+					r.Delete("/matrix/installations/{installationId}", h.RevokeMatrixInstallation)
+					r.Post("/matrix/install", h.RegisterMatrixBot)
+					r.Post("/matrix/installations/{installationId}/bindings", h.BindMatrixUser)
 				})
 			})
 		})

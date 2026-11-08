@@ -31,6 +31,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/integrations/ghsnapshot"
 	"github.com/multica-ai/multica/server/internal/integrations/lark"
 	"github.com/multica-ai/multica/server/internal/integrations/slack"
+	"github.com/multica-ai/multica/server/internal/integrations/matrix"
 	"github.com/multica-ai/multica/server/internal/integrations/telegram"
 	"github.com/multica-ai/multica/server/internal/integrations/wecom"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
@@ -393,6 +394,18 @@ type Handler struct {
 	// The process owner starts and joins it; the synchronous event bus only
 	// enqueues EventChatDone work.
 	TelegramOutbound *telegram.Outbound
+
+	// MatrixInstall owns the Matrix bot install lifecycle (register a pasted
+	// homeserver + access token / list / revoke) and the at-rest encryption of
+	// each bot's token. Nil unless MULTICA_MATRIX_SECRET_KEY is set.
+	MatrixInstall *matrix.InstallService
+	// MatrixBinding creates channel_user_binding rows mapping a Matrix user id
+	// to a Multica user (Phase 1 admin surface; no self-service redeem yet).
+	// Nil unless Matrix is configured.
+	MatrixBinding *matrix.BindingService
+	// MatrixOutbound delivers final chat-done replies to Matrix rooms. Nil
+	// unless Matrix is configured.
+	MatrixOutbound *matrix.Outbound
 
 	// channelFileDelivery names the channel types that can, IN THIS
 	// DEPLOYMENT, carry a file the agent produced the last hop into the
