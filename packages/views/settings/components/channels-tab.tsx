@@ -10,6 +10,7 @@ import { slackInstallationsOptions } from "@multica/core/slack";
 import { dingtalkInstallationsOptions } from "@multica/core/dingtalk";
 import { wecomInstallationsOptions } from "@multica/core/wecom";
 import { telegramInstallationsOptions } from "@multica/core/telegram";
+import { matrixInstallationsOptions } from "@multica/core/matrix";
 import { cn } from "@multica/ui/lib/utils";
 import { AppLink, useNavigation } from "../../navigation";
 import { useT } from "../../i18n";
@@ -18,6 +19,7 @@ import { SlackTab } from "./slack-tab";
 import { DingTalkTab } from "./dingtalk-tab";
 import { WecomTab } from "./wecom-tab";
 import { TelegramTab } from "./telegram-tab";
+import { MatrixTab } from "./matrix-tab";
 import { SettingsCard, SettingsTab } from "./settings-layout";
 import { IntegrationChannelIcon } from "./integration-channel-icon";
 import {
@@ -94,6 +96,11 @@ export function ChannelsTab() {
     enabled: canView,
     select: hasActiveInstallation,
   });
+  const matrix = useQuery({
+    ...matrixInstallationsOptions(wsId),
+    enabled: canView,
+    select: hasActiveInstallation,
+  });
   const channels: ChannelEntry[] = [
     {
       id: "lark",
@@ -131,6 +138,13 @@ export function ChannelsTab() {
       description: t(($) => $.telegram.page_description),
       content: <TelegramTab />,
       state: telegram,
+    },
+    {
+      id: "matrix",
+      label: t(($) => $.matrix.section_title),
+      description: t(($) => $.matrix.page_description),
+      content: <MatrixTab />,
+      state: matrix,
     },
   ];
   const requested = resolveSettingsLocation(navigation.searchParams).integration;

@@ -13,6 +13,10 @@ import {
   RedeemTelegramBindingTokenResponseSchema,
   EMPTY_TELEGRAM_INSTALLATION,
   EMPTY_LIST_TELEGRAM_INSTALLATIONS_RESPONSE,
+  MatrixInstallationSchema,
+  ListMatrixInstallationsResponseSchema,
+  EMPTY_MATRIX_INSTALLATION,
+  EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE,
   EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
   AgentTaskListSchema,
   AgentActivityBucketListSchema,
@@ -2162,6 +2166,57 @@ describe("Telegram installation schemas", () => {
         { endpoint: "POST /api/telegram/binding/redeem" },
       ),
     ).toEqual(EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE);
+  });
+});
+
+// Matrix drives the same connect/disabled/revoked UI decisions as Telegram.
+// Keep its wire-contract fallbacks explicit so malformed or older responses
+// cannot render a bot as connected.
+describe("Matrix installation schemas", () => {
+  it("parses a well-formed installation", () => {
+    const parsed = MatrixInstallationSchema.parse({
+      id: "i1",
+      workspace_id: "w1",
+      agent_id: "a1",
+      user_id: "@ml_dl_research_2:192.168.45.30",
+      homeserver: "http://192.168.45.30:25387",
+      installer_user_id: "u1",
+      status: "active",
+    });
+    expect(parsed.status).toBe("active");
+    expect(parsed.user_id).toBe("@ml_dl_research_2:192.168.45.30");
+  });
+
+  it("defaults incomplete data to the disconnected state", () => {
+    const parsed = MatrixInstallationSchema.parse({ id: "i1" });
+    expect(parsed.status).toBe("revoked");
+    expect(parsed.user_id).toBe("");
+    expect(parsed.homeserver).toBe("");
+
+    const list = ListMatrixInstallationsResponseSchema.parse({});
+    expect(list).toEqual({ installations: [], configured: false });
+  });
+
+  it("keeps unknown forward-compatible installation fields", () => {
+    const parsed = MatrixInstallationSchema.parse({ id: "i1", future_field: "keep" });
+    expect((parsed as unknown as { future_field?: string }).future_field).toBe("keep");
+  });
+
+  it("falls back safely for malformed list and install responses", () => {
+    expect(
+      parseWithFallback(
+        "not json",
+        ListMatrixInstallationsResponseSchema,
+        EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE,
+        { endpoint: "GET /api/workspaces/:id/matrix/installations" },
+      ),
+    ).toEqual(EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE);
+
+    expect(
+      parseWithFallback(42, MatrixInstallationSchema, EMPTY_MATRIX_INSTALLATION, {
+        endpoint: "POST /api/workspaces/:id/matrix/install",
+      }),
+    ).toEqual(EMPTY_MATRIX_INSTALLATION);
   });
 });
 

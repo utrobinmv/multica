@@ -218,6 +218,9 @@ import type {
   ListTelegramInstallationsResponse,
   RegisterTelegramRequest,
   RedeemTelegramBindingTokenResponse,
+  MatrixInstallation,
+  ListMatrixInstallationsResponse,
+  RegisterMatrixRequest,
   Squad,
   SquadMember,
   SquadMemberStatusListResponse,
@@ -407,6 +410,10 @@ import {
   EMPTY_TELEGRAM_INSTALLATION,
   EMPTY_LIST_TELEGRAM_INSTALLATIONS_RESPONSE,
   EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE,
+  MatrixInstallationSchema,
+  ListMatrixInstallationsResponseSchema,
+  EMPTY_MATRIX_INSTALLATION,
+  EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE,
   EMPTY_BILLING_BALANCE,
   EMPTY_BILLING_TRANSACTIONS_PAGE,
   EMPTY_BILLING_BATCHES_PAGE,
@@ -5610,6 +5617,44 @@ export class ApiClient {
 
   async deleteTelegramInstallation(workspaceId: string, installationId: string): Promise<void> {
     await this.fetch(`/api/workspaces/${workspaceId}/telegram/installations/${installationId}`, {
+      method: "DELETE",
+    });
+  }
+
+  async listMatrixInstallations(
+    workspaceId: string,
+  ): Promise<ListMatrixInstallationsResponse> {
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/matrix/installations`,
+    );
+    return parseWithFallback(
+      raw,
+      ListMatrixInstallationsResponseSchema,
+      EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE,
+      { endpoint: "GET /api/workspaces/:id/matrix/installations" },
+    );
+  }
+
+  async matrixInstallBot(
+    workspaceId: string,
+    agentId: string,
+    body: RegisterMatrixRequest,
+  ): Promise<MatrixInstallation> {
+    const search = new URLSearchParams({ agent_id: agentId });
+    const raw = await this.fetch<unknown>(
+      `/api/workspaces/${workspaceId}/matrix/install?${search.toString()}`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    );
+    return parseWithFallback(raw, MatrixInstallationSchema, EMPTY_MATRIX_INSTALLATION, {
+      endpoint: "POST /api/workspaces/:id/matrix/install",
+    });
+  }
+
+  async deleteMatrixInstallation(workspaceId: string, installationId: string): Promise<void> {
+    await this.fetch(`/api/workspaces/${workspaceId}/matrix/installations/${installationId}`, {
       method: "DELETE",
     });
   }

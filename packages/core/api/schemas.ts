@@ -52,6 +52,8 @@ import type {
   TelegramInstallation,
   ListTelegramInstallationsResponse,
   RedeemTelegramBindingTokenResponse,
+  MatrixInstallation,
+  ListMatrixInstallationsResponse,
   GroupedIssuesResponse,
   GitHubConnectResponse,
   IssuePullRequestsResponse,
@@ -3656,6 +3658,43 @@ export const EMPTY_REDEEM_TELEGRAM_BINDING_TOKEN_RESPONSE: RedeemTelegramBinding
   workspace_id: "",
   installation_id: "",
   telegram_user_id: "",
+};
+
+export const MatrixInstallationSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string().default(""),
+  agent_id: z.string().default(""),
+  user_id: z.string().default(""),
+  homeserver: z.string().default(""),
+  installer_user_id: z.string().default(""),
+  status: z.string().default("revoked"),
+  installed_at: z.string().default(""),
+  created_at: z.string().default(""),
+  updated_at: z.string().default(""),
+}).loose();
+
+export const EMPTY_MATRIX_INSTALLATION: MatrixInstallation = {
+  id: "",
+  workspace_id: "",
+  agent_id: "",
+  user_id: "",
+  homeserver: "",
+  installer_user_id: "",
+  status: "revoked",
+  installed_at: "",
+  created_at: "",
+  updated_at: "",
+};
+
+export const ListMatrixInstallationsResponseSchema = z.object({
+  installations: z.array(MatrixInstallationSchema).default([]),
+  configured: z.boolean().default(false),
+  install_supported: z.boolean().optional(),
+}).loose();
+
+export const EMPTY_LIST_MATRIX_INSTALLATIONS_RESPONSE: ListMatrixInstallationsResponse = {
+  installations: [],
+  configured: false,
 };
 
 // Skills. Introduced for `POST /api/skills/:id/refresh` (update a skill from

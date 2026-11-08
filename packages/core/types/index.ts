@@ -282,6 +282,11 @@ export type {
   RedeemTelegramBindingTokenResponse,
 } from "./telegram";
 export type {
+  MatrixInstallation,
+  ListMatrixInstallationsResponse,
+  RegisterMatrixRequest,
+} from "./matrix";
+export type {
   Autopilot,
   AutopilotStatus,
   AutopilotExecutionMode,

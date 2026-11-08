@@ -44,6 +44,7 @@ vi.mock("./slack-tab", () => ({ SlackTab: () => <div>Slack detail</div> }));
 vi.mock("./dingtalk-tab", () => ({ DingTalkTab: () => <div>DingTalk detail</div> }));
 vi.mock("./wecom-tab", () => ({ WecomTab: () => <div>WeCom detail</div> }));
 vi.mock("./telegram-tab", () => ({ TelegramTab: () => <div>Telegram detail</div> }));
+vi.mock("./matrix-tab", () => ({ MatrixTab: () => <div>Matrix detail</div> }));
 
 import { ChannelsTab } from "./channels-tab";
 
@@ -61,16 +62,34 @@ describe("ChannelsTab", () => {
     renderWithI18n(<ChannelsTab />);
 
     expect(screen.getByRole("link", { name: /Slack Connected/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Matrix Connected/ })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /GitHub/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /Composio/ })).toBeNull();
     expect(screen.queryByText("Slack detail")).toBeNull();
-    const shapes = ["lark", "slack", "dingtalk", "wecom", "telegram"].map(
+    const shapes = ["lark", "slack", "dingtalk", "wecom", "telegram", "matrix"].map(
       (channel) => screen.getByTestId(`integration-channel-icon-${channel}`).innerHTML,
     );
-    expect(new Set(shapes).size).toBe(5);
+    expect(new Set(shapes).size).toBe(6);
 
     fireEvent.click(screen.getByRole("link", { name: /Slack Connected/ }));
     expect(state.push).toHaveBeenCalledWith("/acme/settings?tab=channels&integration=slack");
+  });
+
+  it("opens the Matrix detail page from the list", () => {
+    renderWithI18n(<ChannelsTab />);
+    fireEvent.click(screen.getByRole("link", { name: /Matrix Connected/ }));
+    expect(state.push).toHaveBeenCalledWith("/acme/settings?tab=channels&integration=matrix");
+  });
+
+  it("renders the Matrix detail page when integration=matrix", () => {
+    state.search = "tab=channels&integration=matrix";
+    renderWithI18n(<ChannelsTab />);
+    expect(screen.getByText("Matrix detail")).toBeInTheDocument();
+    expect(screen.queryByText("Slack detail")).toBeNull();
+    expect(screen.getByRole("link", { name: "Messaging" })).toHaveAttribute(
+      "href",
+      "/acme/settings?tab=channels",
+    );
   });
 
   it("does not report a revoked bot as connected", () => {
