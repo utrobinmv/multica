@@ -235,4 +235,9 @@ const (
 	// front-ends invalidate the Telegram installations query on either.
 	EventTelegramInstallationCreated = "telegram_installation:created"
 	EventTelegramInstallationRevoked = "telegram_installation:revoked"
+
+	// Matrix installation lifecycle. Same contract as the Slack pair:
+	// front-ends invalidate the Matrix installations query on either.
+	EventMatrixInstallationCreated = "matrix_installation:created"
+	EventMatrixInstallationRevoked = "matrix_installation:revoked"
 )
