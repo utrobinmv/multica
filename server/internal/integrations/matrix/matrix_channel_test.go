@@ -58,11 +58,13 @@ func TestDispatchHandlesMentionedMessage(t *testing.T) {
 	}
 }
 
-func TestDispatchPassesUnaddressedRoomMessageAsNotAddressed(t *testing.T) {
+func TestDispatchForwardsAddressabilityForRoomMessage(t *testing.T) {
 	// dispatch hands ANY m.room.message to the handler; the engine drops group
 	// messages that are not addressed to the bot. dispatch's own contract is
-	// to preserve AddressedToBot=false on the translated message so the engine
-	// can make that drop decision downstream.
+	// to preserve AddressedToBot on the translated message so the engine can
+	// make that drop decision downstream. A plain message with no mentions is
+	// now addressed (bot answers without a @handle); a message that mentions
+	// another participant is not.
 	c := &matrixChannel{
 		botID:        "@atlas:example.org",
 		api:          newMatrixAPI("http://hs", "tok", testClient()),
@@ -74,14 +76,30 @@ func TestDispatchPassesUnaddressedRoomMessageAsNotAddressed(t *testing.T) {
 		handled <- m
 		return nil
 	}
+
+	// Plain message, no mentions: addressed.
 	raw := json.RawMessage(`{"event_id":"$e2","type":"m.room.message","sender":"@alice:example.org","content":{"msgtype":"m.text","body":"casual chat"}}`)
 	if err := c.dispatch(context.Background(), "!room:example.org", raw); err != nil {
 		t.Fatalf("dispatch error: %v", err)
 	}
 	select {
 	case m := <-handled:
+		if !m.AddressedToBot {
+			t.Fatal("expected AddressedToBot=true for a plain group message (no @handle prefix)")
+		}
+	default:
+		t.Fatal("expected dispatch to forward the m.room.message to the handler")
+	}
+
+	// Message mentions another participant, not the bot: not addressed.
+	rawAlt := json.RawMessage(`{"event_id":"$e3","type":"m.room.message","sender":"@alice:example.org","content":{"msgtype":"m.text","body":"hey @bob:example.org","m.mentions":{"user_ids":["@bob:example.org"]}}}`)
+	if err := c.dispatch(context.Background(), "!room:example.org", rawAlt); err != nil {
+		t.Fatalf("dispatch error: %v", err)
+	}
+	select {
+	case m := <-handled:
 		if m.AddressedToBot {
-			t.Fatal("expected AddressedToBot=false for a group message that does not mention the bot")
+			t.Fatal("expected AddressedToBot=false when the message mentions another participant, not the bot")
 		}
 	default:
 		t.Fatal("expected dispatch to forward the m.room.message to the handler")

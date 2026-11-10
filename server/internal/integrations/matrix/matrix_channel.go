@@ -93,6 +93,18 @@ func (c *matrixChannel) Connect(ctx context.Context) error {
 				}
 			}
 		}
+		// Accept room invites so a user who invites the bot does not have to
+		// confirm the membership. Messages cannot be read from an un-joined
+		// (invited-only) room, which is why a missed join looks like the bot is
+		// ignoring the room. A transient join failure is logged and retried on
+		// the next sync delta rather than taken down the loop.
+		for roomID := range res.Rooms.Invite {
+			if err := c.api.joinRoom(ctx, roomID); err != nil {
+				c.logger.WarnContext(ctx, "matrix: failed to accept room invite", "bot_id", c.botID, "room_id", roomID, "error", err)
+				continue
+			}
+			c.logger.InfoContext(ctx, "matrix: accepted invite and joined room", "bot_id", c.botID, "room_id", roomID)
+		}
 		if res.NextBatch != "" {
 			since = res.NextBatch
 		}

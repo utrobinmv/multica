@@ -96,6 +96,10 @@ type syncResult struct {
 				Events []json.RawMessage `json:"events"`
 			} `json:"timeline"`
 		} `json:"join"`
+		// Invite lists rooms the bot has been invited to but not yet joined.
+		// The adapter accepts these (joinRoom) so a user inviting a bot to a
+		// room does not have to confirm the membership manually.
+		Invite map[string]json.RawMessage `json:"invite"`
 	} `json:"rooms"`
 }
 
@@ -140,6 +144,27 @@ func (a *matrixAPI) sendMessage(ctx context.Context, roomID, txnID string, conte
 		return "", errors.New("matrix: send returned no event_id")
 	}
 	return out.EventID, nil
+}
+
+// joinRoom accepts a room invite for the bot by POSTing a join membership.
+// The method is called when /sync reports the room under rooms.invite; the
+// bot cannot receive m.room.message events from a room it has only been
+// invited to but has not joined.
+func (a *matrixAPI) joinRoom(ctx context.Context, roomID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		a.homeserver+"/_matrix/client/v3/rooms/"+urlPathEscape(roomID)+"/join",
+		strings.NewReader("{}"))
+	if err != nil {
+		return &requestError{method: "POST", cause: err}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var out struct {
+		RoomID string `json:"room_id"`
+	}
+	if err := a.do(req, &out); err != nil {
+		return err
+	}
+	return nil
 }
 
 // get performs a Bearer-authenticated GET and decodes the response into out.

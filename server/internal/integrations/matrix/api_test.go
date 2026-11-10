@@ -22,6 +22,8 @@ type fakeHomeserver struct {
 	whoamiCode int
 	sendCode   int
 	gotSend    map[string]any
+	gotJoin    string
+	invite     map[string]any
 }
 
 func (f *fakeHomeserver) handler() http.Handler {
@@ -40,7 +42,11 @@ func (f *fakeHomeserver) handler() http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]any{"user_id": f.whoami})
 	})
 	mux.HandleFunc("/_matrix/client/v3/sync", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"next_batch": "s123"})
+		resp := map[string]any{"next_batch": "s123"}
+		if f.invite != nil {
+			resp["rooms"] = map[string]any{"invite": f.invite}
+		}
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/send/m.room.message/") {
@@ -53,6 +59,9 @@ func (f *fakeHomeserver) handler() http.Handler {
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			f.gotSend = body
 			_ = json.NewEncoder(w).Encode(map[string]any{"event_id": "$event_" + r.URL.Query().Get("txn")})
+		} else if strings.Contains(r.URL.Path, "/join") {
+			f.gotJoin = r.URL.Path
+			_ = json.NewEncoder(w).Encode(map[string]any{"room_id": "!room:example.org"})
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -114,6 +123,40 @@ func TestSendMessageForbiddenIsNotConflict(t *testing.T) {
 	}
 	if isConflict(err) {
 		t.Fatalf("M_FORBIDDEN must not be reported as a token conflict: %v", err)
+	}
+}
+
+func TestJoinRoomPostsToRoomsJoinEndpoint(t *testing.T) {
+	f := &fakeHomeserver{t: t, whoami: "@bot:example.org"}
+	api, _ := newFakeAPI(t, f)
+	if err := api.joinRoom(context.Background(), "!invited:example.org"); err != nil {
+		t.Fatalf("joinRoom error: %v", err)
+	}
+	if !strings.HasPrefix(f.gotJoin, "/_matrix/client/v3/rooms/") || !strings.HasSuffix(f.gotJoin, "/join") {
+		t.Fatalf("joinRoom hit unexpected path %q, want /_matrix/client/v3/rooms/{roomId}/join", f.gotJoin)
+	}
+}
+
+func TestSyncParsesInvite(t *testing.T) {
+	f := &fakeHomeserver{
+		t:      t,
+		whoami: "@bot:example.org",
+		invite: map[string]any{
+			"!invited:example.org": map[string]any{
+				"invite_state": map[string]any{"events": []any{}},
+			},
+		},
+	}
+	api, _ := newFakeAPI(t, f)
+	res, err := api.sync(context.Background(), "s0", 60000)
+	if err != nil {
+		t.Fatalf("sync error: %v", err)
+	}
+	if len(res.Rooms.Invite) != 1 {
+		t.Fatalf("sync parsed %d invite rooms, want 1", len(res.Rooms.Invite))
+	}
+	if _, ok := res.Rooms.Invite["!invited:example.org"]; !ok {
+		t.Fatalf("expected !invited:example.org to be present in rooms.invite, got %v", res.Rooms.Invite)
 	}
 }
 

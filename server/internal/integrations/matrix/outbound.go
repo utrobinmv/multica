@@ -118,6 +118,7 @@ type outboundTarget struct {
 func (o *Outbound) handleChatDone(e events.Event) {
 	content, ok := chatDoneContent(e.Payload)
 	if !ok {
+		o.logger.DebugContext(context.Background(), "matrix outbound: chat-done has no text content", "task_id", e.TaskID, "payload", fmt.Sprintf("%T", e.Payload))
 		return
 	}
 	taskID, _ := eventTaskID(e)
@@ -126,18 +127,24 @@ func (o *Outbound) handleChatDone(e events.Event) {
 	t, err := o.resolveTarget(ctx, taskID)
 	if err != nil || t == nil {
 		if err != nil {
-			o.logger.WarnContext(ctx, "matrix outbound: resolve chat-done target failed", "error", err)
+			o.logger.WarnContext(ctx, "matrix outbound: resolve chat-done target failed", "task_id", taskID.String(), "error", err)
+		} else {
+			o.logger.DebugContext(ctx, "matrix outbound: chat-done has no matrix route (nil target)", "task_id", taskID.String())
 		}
 		return
 	}
 	api := newMatrixAPI(t.creds.Homeserver, t.creds.AccessToken, o.client)
-	if _, err := api.sendMessage(ctx, t.roomID, txnID(), map[string]any{
+	eventID, err := api.sendMessage(ctx, t.roomID, txnID(), map[string]any{
 		"msgtype": "m.text",
 		"body":    content,
-	}); err != nil {
+	})
+	if err != nil {
 		o.logger.WarnContext(ctx, "matrix outbound: send chat-done reply failed",
-			"installation_id", util.UUIDToString(t.installationID), "error", err)
+			"installation_id", util.UUIDToString(t.installationID), "room_id", t.roomID, "error", err)
+		return
 	}
+	o.logger.InfoContext(ctx, "matrix outbound: sent chat-done reply",
+		"installation_id", util.UUIDToString(t.installationID), "room_id", t.roomID, "event_id", eventID)
 }
 
 func (o *Outbound) handleTaskFailed(e events.Event) {

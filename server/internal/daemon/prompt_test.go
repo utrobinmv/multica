@@ -543,6 +543,51 @@ func TestBuildChatPromptChannelAwareness(t *testing.T) {
 	}
 }
 
+// TestBuildChatPromptMatrixTaskAwareness pins the Matrix-specific chat policy:
+// a Matrix-room chat must behave like a web Chat — the agent knows it works
+// for this Multica workspace, is NOT forbidden from reading its own assigned
+// issues, and is handed the command to list its real task queue. Telegram and
+// every other channel keep the older, narrower behavior unchanged.
+func TestBuildChatPromptMatrixTaskAwareness(t *testing.T) {
+	const agentID = "af9956b9-07e3-4c3e-a882-d9d5fa21f3e9"
+	const agentName = "Atlas Researcher"
+
+	t.Run("matrix prompt queries its own tasks", func(t *testing.T) {
+		out := buildChatPrompt(Task{
+			ChatSessionID:   "sess-1",
+			ChatChannelType: "matrix",
+			AgentID:         agentID,
+			Agent:           &AgentData{ID: agentID, Name: agentName},
+			ChatMessage:     "Сколько задач на тебе висит?",
+		})
+		// Must not be told its whole Multica context is off-limits.
+		if strings.Contains(out, "Never look in Multica issues or comments for this conversation") {
+			t.Fatalf("matrix prompt forbids reading its own issues outright\n--- output ---\n%s", out)
+		}
+		// Must be handed the command to fetch its real task queue by its own agent id.
+		if !strings.Contains(out, "multica issue list --assignee-id "+agentID) {
+			t.Fatalf("matrix prompt missing the self-task query command\n--- output ---\n%s", out)
+		}
+		// Must still know it is a channel conversation, not the web app.
+		if !strings.Contains(out, "Matrix") || !strings.Contains(out, "not the Multica web app") {
+			t.Fatalf("matrix prompt lost channel awareness\n--- output ---\n%s", out)
+		}
+	})
+
+	t.Run("telegram is unchanged and still lacks task awareness", func(t *testing.T) {
+		out := buildChatPrompt(Task{
+			ChatSessionID:   "sess-1",
+			ChatChannelType: "telegram",
+			AgentID:         agentID,
+			Agent:           &AgentData{ID: agentID, Name: agentName},
+			ChatMessage:     "Сколько задач на тебе висит?",
+		})
+		if strings.Contains(out, "multica issue list") {
+			t.Fatalf("telegram prompt must not gain matrix-specific task awareness\n--- output ---\n%s", out)
+		}
+	})
+}
+
 // TestBuildChatPromptNoNarrationOnEveryChannel pins the THIRD axis of the chat
 // channel policy: the no-narration delivery rule keys off "is there a channel at
 // all", like the upload axis and unlike the Slack/Feishu history axis.

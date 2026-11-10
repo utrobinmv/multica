@@ -73,14 +73,28 @@ func TestInboundFromEventRawCarriesBotID(t *testing.T) {
 	}
 }
 
-func TestInboundFromEventUnaddressedGroupNotAddressed(t *testing.T) {
+func TestInboundFromEventCasualMessageNowAddressed(t *testing.T) {
+	// A plain room message with no mentions is treated as addressed to the bot:
+	// users chat with a single bot in a room without typing the full @...:id
+	// handle every time. Messages that name ANOTHER participant (mentions
+	// present but not the bot) still count as unaddressed so the bot never
+	// dogs another user's conversation.
 	raw := mustRaw(t, `{"event_id":"$e1","type":"m.room.message","sender":"@alice:example.org","content":{"msgtype":"m.text","body":"casual chat"}}`)
 	msg, ok := inboundFromEvent(raw, "!room:example.org", "@bot:example.org")
 	if !ok {
 		t.Fatal("expected actionable")
 	}
-	if msg.AddressedToBot {
-		t.Error("expected AddressedToBot=false for a message that does not name the bot")
+	if !msg.AddressedToBot {
+		t.Error("expected AddressedToBot=true for a plain message with no mentions (bot replies without a @handle prefix)")
+	}
+
+	rawAlt := mustRaw(t, `{"event_id":"$e2","type":"m.room.message","sender":"@alice:example.org","content":{"msgtype":"m.text","body":"hey @bob:example.org what do you think","m.mentions":{"user_ids":["@bob:example.org"]}}}`)
+	msgAlt, ok := inboundFromEvent(rawAlt, "!room:example.org", "@bot:example.org")
+	if !ok {
+		t.Fatal("expected actionable")
+	}
+	if msgAlt.AddressedToBot {
+		t.Error("expected AddressedToBot=false when the message mentions another participant, not the bot")
 	}
 }
 

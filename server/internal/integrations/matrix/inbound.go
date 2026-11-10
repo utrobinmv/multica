@@ -138,21 +138,35 @@ func mapMatrixMsgType(mt string) channel.MsgType {
 	}
 }
 
-// addressedToBot reports whether a room message is an explicit interaction
-// with the bot: an @mention in the body, a Matrix m.mentions user id. A plain
-// room message that names neither is NOT addressed (the engine drops it, same
-// policy as Telegram group messages). Matrix room replies carry only an event
-// id, whose owner the adapter cannot resolve here, so a reply counts only when
-// the body also mentions the bot.
+// addressedToBot reports whether a room message is an interaction with the
+// bot. True when the bot appears in Matrix m.mentions or in the body — or when
+// the message names NOBODY (no m.mentions at all), because users chat with a
+// single bot in a room without typing the full @...:id handle every time, and
+// the engine drops otherwise. A message that mentions another participant
+// (mentions present but not the bot) is NOT addressed, so the bot never dogs
+// another user's conversation. Matrix room replies carry only an event id,
+// whose owner the adapter cannot resolve here, so a reply counts only when the
+// body also mentions the bot.
 func addressedToBot(content messageContent, botUserID string) bool {
-	if content.Mentions != nil {
-		for _, u := range content.Mentions.UserIDs {
-			if u == botUserID {
-				return true
-			}
+	// No mentions at all: a plain room message not tied to any participant.
+	// Treat it as addressed so a bot answers without the user typing the full
+	// @handle every time.
+	if content.Mentions == nil {
+		return true
+	}
+	// An explicit empty mentions block means nothing was addressed to anyone —
+	// same treatment as a plain message.
+	if len(content.Mentions.UserIDs) == 0 {
+		return true
+	}
+	for _, u := range content.Mentions.UserIDs {
+		if u == botUserID {
+			return true
 		}
 	}
-	return strings.Contains(content.Body, botUserID)
+	// Mentions present but none target this bot: not addressed, so the bot does
+	// not dog another participant's conversation.
+	return false
 }
 
 // stripHTML removes the tags from a Matrix formatted (HTML) body, collapsing

@@ -797,7 +797,23 @@ func buildChatPrompt(task Task) string {
 	// silently dropped it for Feishu/Lark (GH #6006).
 	if task.ChatChannelType != "" {
 		platform := channelDisplayName(task.ChatChannelType)
-		fmt.Fprintf(&b, "You are operating inside a %s conversation — not the Multica web app. Never look in Multica issues or comments for this conversation.\n", platform)
+		// Matrix chat behaves like the web Chat: the agent works for this
+		// workspace and must be able to answer about its own assigned issues
+		// (and org/instructions), not just the conversation. The blanket
+		// "Never look in Multica issues" line below is correct for other
+		// channels (its purpose is to stop the agent hunting the chat's own
+		// history in issues), but Matrix overrides it with a scoped version:
+		// the chat's HISTORY stays out of issues, the agent's own task queue
+		// does not. Scope deliberately Matrix-only — Telegram and the other
+		// channels are unchanged.
+		if task.ChatChannelType == execenv.ChannelTypeMatrix {
+			fmt.Fprintf(&b, "You are operating inside a %s conversation — not the Multica web app. Do NOT look in Multica issues or comments for THIS conversation's history — but you still work for this Multica workspace: its organization, your own instructions, and your assigned tasks are real and queryable.\n", platform)
+			if task.AgentID != "" {
+				fmt.Fprintf(&b, "When someone asks about your tasks or what you are working on, run:\n- `multica issue list --assignee-id %s --output json` — your assigned issues (add `--status open` to narrow to open ones).\n- `multica issue get <issue-id> --output json` — details of one issue you named.\nAnswer from the real data those commands return; never invent a task or claim none exist without checking.\n", task.AgentID)
+			}
+		} else {
+			fmt.Fprintf(&b, "You are operating inside a %s conversation — not the Multica web app. Never look in Multica issues or comments for this conversation.\n", platform)
+		}
 		if task.ChatChannelType == execenv.ChannelTypeSlack {
 			if source := protocol.SafeSlackSource(task.ChatSource); source != nil {
 				data, _ := json.Marshal(source)
